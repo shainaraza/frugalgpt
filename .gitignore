@@ -1,0 +1,22 @@
+# Reference clone of the official code (read-only)
+reference/
+
+# Data, caches, model checkpoints, outputs
+data/
+cache/
+checkpoints/
+outputs/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# Secrets and local files
+.env
+CLAUDE.local.md
+.claude/settings.local.json
+.DS_Store

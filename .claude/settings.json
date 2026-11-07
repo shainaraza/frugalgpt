@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(uv run pytest:*)",
+      "Bash(uv run ruff:*)",
+      "Bash(uv sync:*)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=$(python3 -c 'import json,sys; print(json.load(sys.stdin).get(\"tool_input\",{}).get(\"file_path\",\"\"))'); case \"$f\" in *.py) cd \"$CLAUDE_PROJECT_DIR\" && uv run --quiet ruff format \"$f\" >/dev/null 2>&1 || true ;; esac"
+          }
+        ]
+      }
+    ]
+  }
+}
