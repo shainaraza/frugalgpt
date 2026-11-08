@@ -1,0 +1,14 @@
+# Sec. 4 generation scorer g_i(q, a). Defaults match the official scoring.py (HF Trainer defaults
+# filled in where the official code relies on them).
+backbone: distilbert-base-uncased
+output: p_correct          # p_correct (official: softmax[1]) | max_softmax (paper text)
+epochs: 8
+batch_size: 8
+eval_batch_size: 64
+learning_rate: 5.0e-5      # HF Trainer default
+warmup_steps: 500
+weight_decay: 0.01         # not applied to bias / LayerNorm weights (HF Trainer default)
+max_grad_norm: 1.0         # HF Trainer default
+max_length: 512
+val_size: 0.55             # official score_test_size; best epoch = lowest validation loss
+seed: 2024

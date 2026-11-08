@@ -5,15 +5,20 @@ description = "Budget-aware LLM cascades: a re-implementation of FrugalGPT (Chen
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "matplotlib>=3.11.2",
     "numpy>=1.26",
     "pandas>=2.2",
     "pyyaml>=6.0",
+    "scipy>=1.18.1",
+    "torch>=2.15.0",
+    "transformers>=5.22.2",
 ]
 
 [dependency-groups]
 dev = [
     "pytest>=8.0",
     "ruff>=0.6",
+    "tiktoken>=0.14.0",
 ]
 
 [build-system]
