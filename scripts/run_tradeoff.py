@@ -90,6 +90,7 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     ap.add_argument("--dataset", default="HEADLINES")
     ap.add_argument("--chain-search", default="exhaustive", choices=["exhaustive", "mpi_pruned"])
+    ap.add_argument("--length", type=int, default=3, help="number of LLMs in the chain (L)")
     ap.add_argument(
         "--n-log",
         type=int,
@@ -130,7 +131,7 @@ def main() -> None:
         high = float(train.cost[:, ref].mean())
         budgets = budget_grid([], low, high, n_log, extra=[fig2_budget])
     t0 = time.time()
-    curve = tradeoff(train, test, budgets, llms, chain_search=args.chain_search)
+    curve = tradeoff(train, test, budgets, llms, length=args.length, chain_search=args.chain_search)
     print(f"trade-off: {len(budgets)} budgets in {time.time() - t0:.0f} s")
     curve.to_csv(out / "tradeoff.csv", index=False)
 
@@ -203,8 +204,12 @@ def main() -> None:
     (out / "table2.json").write_text(json.dumps(table2, indent=2))
 
     # --- Fig. 2: case study ---------------------------------------------------------------------
-    cs = case_study(train, test, fig2_budget, llms, ref, chain_search=args.chain_search)
-    cs_pruned = case_study(train, test, fig2_budget, llms, ref, chain_search="mpi_pruned")
+    cs = case_study(
+        train, test, fig2_budget, llms, ref, length=args.length, chain_search=args.chain_search
+    )
+    cs_pruned = case_study(
+        train, test, fig2_budget, llms, ref, length=args.length, chain_search="mpi_pruned"
+    )
     if cs is None:
         print(f"Fig. 2: no feasible strategy at budget {fig2_budget:.3g} per query; skipped")
         case = {"budget_per_query": fig2_budget, "chain": None}

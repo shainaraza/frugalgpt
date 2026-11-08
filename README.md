@@ -36,6 +36,7 @@ cascade simulation, optimization, baselines, plots) runs on `(n_queries × n_llm
 | `optimizer` — chain + threshold search under a budget | Eq. 1 |
 | `baselines` — best single LLM, log-prob threshold | Fig. 4 |
 
+Code layout and data flow: [`docs/architecture.md`](docs/architecture.md).
 Status: see [`ROADMAP.md`](ROADMAP.md). Notes on the paper and on how the official code differs:
 [`docs/`](docs/).
 
