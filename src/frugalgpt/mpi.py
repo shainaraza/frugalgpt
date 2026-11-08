@@ -19,6 +19,10 @@ def mpi_matrix(correct: np.ndarray) -> np.ndarray:
             raise ValueError("correct must contain only True/False or 0/1")
         c = c.astype(bool)
     right = c.astype(np.float64)
+    # One matrix product counts all pairs at once: entry [a, b] sums over queries of
+    # right[q, a] · wrong[q, b], i.e. "a got it and b missed it". Dividing by n gives a rate.
+    # Intuition: MPI[a, b] is the most accuracy that adding LLM a *after* LLM b could ever buy
+    # (with a perfect scorer). An LLM that fails on the same queries as b adds nothing.
     return right.T @ (1.0 - right) / c.shape[0]
 
 
@@ -46,6 +50,8 @@ def pruned_chains(mpi: np.ndarray, length: int, m: int) -> Iterator[tuple[int, .
     if m < 1:
         raise ValueError(f"m must be >= 1, got {m}")
 
+    # Depth-first: from the current last LLM, branch only to the m LLMs that best fix its
+    # mistakes. Cuts K=12, L=3 from 1320 ordered chains to at most 12·3·3 = 108.
     def extend(chain: tuple[int, ...]) -> Iterator[tuple[int, ...]]:
         if len(chain) == length:
             yield chain

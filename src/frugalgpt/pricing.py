@@ -204,6 +204,9 @@ def recompute_costs(
     for m in llms:
         if (prices[m].unit == "char") != (counting[m].encoding is None):
             raise ValueError(f"{m}: price unit {prices[m].unit!r} does not match its counting rule")
+    # Cost model: c = c̃_input · #input tokens + c̃_output · #output tokens + c̃_request.
+    # Input (the prompt with few-shot examples) dominates for short answers, which is why
+    # FrugalGPT's prompt-adaptation ideas target the prompt length.
     cost = np.empty(answers.shape, dtype=np.float64)
     for k, model in enumerate(llms):
         n_in, n_out = count_io(list(queries), list(answers[:, k]), counting[model])

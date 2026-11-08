@@ -30,8 +30,13 @@ import scipy.optimize
 from frugalgpt.cascade import Cascade
 from frugalgpt.mpi import mpi_matrix, pruned_chains
 
+# Why quantiles instead of raw thresholds: raw score thresholds live on a different scale for
+# every LLM and dataset. A quantile q_t is "the share of queries reaching step t that get passed
+# on", so one grid on (0, 1) works everywhere and each grid point is a meaningful split.
 GRID_POINTS = 40  # official: scipy.optimize.brute(..., Ns=40)
 Q_LOW, Q_HIGH = 1e-5, 1 - 1e-5  # official quantile range
+# Constraint handling by penalty: over-budget points get a flat bad value, so a minimizer that
+# knows nothing about constraints (brute grid, Nelder-Mead) simply avoids them.
 PENALTY = 10000.0  # official objective value for infeasible / rejected points
 BUDGET_RTOL = 1e-12  # float slack so a cost exactly at the budget counts as feasible
 
@@ -88,6 +93,8 @@ def quantiles_to_thresholds(data: ChainData, quantiles: np.ndarray) -> np.ndarra
     ``quantiles`` has ``L − 1`` entries; each is clipped to ``[0, 1]`` as in the official code.
     """
     thresholds = np.empty(data.length - 1)
+    # The quantile at step t is taken only over queries that *reach* step t (were passed on by
+    # every earlier step), so thresholds are computed one step at a time.
     reach = np.ones(data.n, dtype=bool)
     for t, q in enumerate(quantiles):
         s = data.score[reach, t]
@@ -108,6 +115,7 @@ def evaluate(data: ChainData, thresholds: np.ndarray) -> tuple[float, float]:
 
 def _objective(data: ChainData, quantiles: np.ndarray, budget: float) -> float:
     """Official ``g``: −(#correct) if the quantiles are non-decreasing and within budget."""
+    # Official restriction (not in the paper): pass-on shares must not decrease along the chain.
     if np.any(np.diff(quantiles) < 0):
         return PENALTY
     n_correct, total_cost = evaluate(data, quantiles_to_thresholds(data, quantiles))
@@ -124,6 +132,10 @@ def _grid_objective(data: ChainData, grid: np.ndarray, budget: float) -> np.ndar
     recursively, and for the last scored step all grid values are handled at once on the queries
     sorted by score.
     """
+    # Speed trick: for L = 3 the grid has 40 × 40 points. Instead of simulating each point, fix
+    # the first threshold (outer loop), then sort the remaining queries by their step-1 score:
+    # every step-1 threshold is now a cut position k in that sorted list, and prefix sums give
+    # #correct and cost for all 40 cuts at once. Above the cut → stop at step 1; below → last LLM.
     length, g = data.length, len(grid)
     n_correct = np.zeros((g,) * (length - 1))
     total_cost = np.zeros((g,) * (length - 1))
@@ -187,12 +199,16 @@ def search_thresholds(data: ChainData, budget: float) -> ChainResult | None:
     Returns ``None`` if the chain cannot meet the budget: its first LLM alone is too expensive,
     or no quantile vector is within budget.
     """
+    # Every query pays for the first LLM, so if it alone exceeds the budget no threshold helps.
     if over_budget(data.cumcost[:, 0].sum(), budget, data.n):
         return None
     if data.length == 1:
         n_correct, total_cost = evaluate(data, np.empty(0))
         return ChainResult(Cascade(data.order, ()), (), n_correct / data.n, total_cost / data.n)
 
+    # Two stages: a coarse global grid avoids bad local optima (the objective is a step function
+    # of the thresholds, so gradients are useless), then derivative-free Nelder-Mead refines
+    # from the best grid point.
     grid = np.linspace(Q_LOW, Q_HIGH, GRID_POINTS)
     values = _grid_objective(data, grid, budget)
     best = np.unravel_index(np.argmin(values), values.shape)  # first minimum, C order (= brute)
@@ -259,6 +275,8 @@ def optimize(
     if not (np.isfinite(budget) and budget >= 0):
         raise ValueError(f"budget must be a finite non-negative number, got {budget}")
 
+    # Outer search over chains, inner search over thresholds; keep the most accurate on train.
+    # Cost: 1320 chains × one threshold search each for K = 12, L = 3 (≈ 11 s on HEADLINES).
     best: ChainResult | None = None
     n_chains = n_feasible = 0
     for order in candidate_chains(correct, length, chain_search, m):

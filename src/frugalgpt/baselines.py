@@ -149,6 +149,10 @@ def threshold_curve(
     floor = min(finite.min() if finite.size else 0.0, taus.min()) - 1.0
     s = finite_scores(raw, floor=floor)  # below every score and every τ → never accepted
 
+    # The baseline is a 2-LLM cascade with one threshold, so we reuse the cascade simulator: sweep
+    # τ from "accept everything" (all cheap) to "accept nothing" (all expensive).
+    # FrugalGPT differs in three ways: learned scorer per LLM, chain chosen from all LLMs, and
+    # thresholds optimized under a budget.
     table = np.full(c.shape, np.nan)  # only the cheap LLM's score is read
     table[:, cheap] = s
     acc, mean_cost, escalated = [], [], []

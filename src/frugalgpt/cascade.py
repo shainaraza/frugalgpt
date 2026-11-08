@@ -89,6 +89,8 @@ def stop_index(chain_scores: np.ndarray, thresholds: tuple[float, ...]) -> np.nd
     n, length = chain_scores.shape
     if len(thresholds) != length - 1:
         raise ValueError(f"need {length - 1} thresholds, got {len(thresholds)}")
+    # Build an (n, L) "would accept here" mask; the first True per row is where the query stops.
+    # The last column is forced True so every query gets an answer (no abstention).
     accept = np.ones((n, length), dtype=bool)  # last column: always accept
     accept[:, :-1] = chain_scores[:, :-1] > np.asarray(thresholds, dtype=np.float64)
     return accept.argmax(axis=1)  # argmax returns the first True
@@ -125,8 +127,13 @@ def simulate(
     if not np.isfinite(cost[:, order]).all() or (cost[:, order] < 0).any():
         raise ValueError("costs must be finite and non-negative")
 
+    # Vectorized cascade: instead of looping over queries, find for every query the chain
+    # position where it stops, then gather that position's correctness and cumulative cost.
     stop = stop_index(chain_scores, cascade.thresholds)
     rows = np.arange(len(stop))
+    # Cumulative, not per-LLM: a query that stops at step t has paid for steps 0..t, because
+    # every LLM before it was called and its answer rejected. This is why a bad scorer on a cheap
+    # LLM is expensive: rejected answers still cost money.
     cumulative_cost = np.cumsum(cost[:, order], axis=1)
     return CascadeResult(
         stop=stop,

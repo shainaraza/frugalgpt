@@ -79,6 +79,9 @@ def scorer_text(query: str, answer: str, prefix: str = "") -> str:
     block (:func:`prompt_prefix`), which the official notebooks strip this way; it matters for
     datasets whose prompts do not use ``"Q:"`` (OVERRULING, COQA, SCIQ).
     """
+    # Why strip the few-shot block: it is identical for every query, so it carries no signal,
+    # and it eats the 512-token window. On COQA / SCIQ the block alone exceeds 512 tokens, so
+    # without stripping every truncated input would be the same string and the scorer useless.
     text = (query + " " + answer).removeprefix(prefix)
     return "Q:" + text.split("Q:")[-1]
 
@@ -95,6 +98,8 @@ def prompt_prefix(queries: Sequence[str]) -> str:
     qs = list(queries)
     if not qs:
         return ""
+    # Character-level common start can end mid-way into the query's own text (e.g. two queries
+    # that both begin "Q: What"), so cut back to the last blank line, which ends a few-shot block.
     common = os.path.commonprefix(qs)
     cut = common.rfind("\n\n")
     return common[: cut + 2] if cut >= 0 else ""
@@ -138,6 +143,8 @@ def roc_auc(labels: np.ndarray, scores: np.ndarray) -> float:
     n_pos, n_neg = int(y.sum()), int((~y).sum())
     if n_pos == 0 or n_neg == 0:
         return float("nan")
+    # AUC = how well the score *ranks* right answers above wrong ones (threshold-free). This is
+    # what the cascade needs: it only compares scores to a threshold, never uses their scale.
     order = np.argsort(s, kind="mergesort")
     sorted_s = s[order]
     ranks = np.empty(len(s), dtype=np.float64)
@@ -232,6 +239,9 @@ def predict_logits(
 
 def logits_to_score(logits: np.ndarray, output: ScoreOutput = "p_correct") -> np.ndarray:
     """Sec. 4 score from logits: ``softmax[1]`` (official) or ``max(softmax)`` (paper text)."""
+    # p_correct = P(label 1 = "answer is correct"): monotone in confidence that the answer is
+    # right. max_softmax (paper wording) is high for confident *wrong* predictions too, so it
+    # cannot tell "surely right" from "surely wrong"; the official code uses p_correct.
     probs = torch.softmax(torch.as_tensor(logits, dtype=torch.float64), dim=-1).numpy()
     if output == "p_correct":
         return probs[:, 1]
@@ -312,6 +322,9 @@ def train_scorer(
     gen = np.random.default_rng(cfg.seed)
     torch.manual_seed(cfg.seed)  # dropout
 
+    # Early stopping by checkpoint: train all epochs, remember the weights of the epoch with the
+    # lowest validation loss, restore them at the end. The scorer overfits fast (best epoch is
+    # usually 2-3 of 8), so this matters.
     history: list[EpochLog] = []
     best_loss, best_epoch, best_state = math.inf, cfg.epochs, None
     for epoch in range(1, cfg.epochs + 1):
@@ -323,6 +336,7 @@ def train_scorer(
             loss = F.cross_entropy(model(**enc).logits, target)
             optimizer.zero_grad()
             loss.backward()
+            # Standard BERT fine-tuning recipe: clip gradients, then step the warmup/decay LR.
             torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.max_grad_norm)
             optimizer.step()
             scheduler.step()

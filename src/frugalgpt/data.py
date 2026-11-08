@@ -109,6 +109,9 @@ def build_tables(df: pd.DataFrame) -> Tables:
     """
     if df.empty:
         raise ValueError("no responses")
+    # Long → wide: the CSV has one row per (query, LLM). The "copy" counter (0, 1, 2 … per
+    # repeated prompt) makes (query, copy) a unique key, so identical prompt texts that are
+    # different dataset items stay separate rows instead of colliding in the pivot.
     df = df.assign(copy=df.groupby(["query", "model name"]).cumcount())
     refs = df.groupby(["query", "copy"], sort=False)["ref_answer"].unique()
     if (refs.map(len) != 1).any():

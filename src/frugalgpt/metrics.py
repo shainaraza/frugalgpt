@@ -21,6 +21,8 @@ def normalize_answer(text: str) -> str:
     Steps, in this order: lowercase → remove ASCII punctuation → replace the words a/an/the with a
     space → collapse runs of whitespace and strip the ends.
     """
+    # Normalization makes formatting noise not count as a wrong answer: "The Up." == "up".
+    # The order matters: punctuation is removed before articles, so "the." still loses "the".
     text = text.lower()
     text = "".join(ch for ch in text if ch not in _PUNCTUATION)
     text = _ARTICLES.sub(" ", text)

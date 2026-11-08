@@ -58,6 +58,8 @@ def tradeoff(
     if len(names) != k:
         raise ValueError(f"{len(names)} LLM names for {k} columns")
 
+    # Protocol: the strategy is *learned* on train and *reported* on test, so test numbers are
+    # an honest estimate. Each budget is one independent optimization → one point of the curve.
     rows = []
     for budget in budgets:  # an empty list gives an empty frame with the usual columns
         res = optimize(train.correct, train.cost, train.score, budget, length, chain_search, m)
@@ -123,6 +125,8 @@ def match_support(
         raise ValueError("need two non-empty 1-D arrays of the same length")
     if n_boot < 1:
         raise ValueError("n_boot must be ≥ 1")
+    # Paired: resample *queries*, keeping each query's (cascade, reference) outcome together.
+    # Only queries where they disagree matter; a match "by 2 queries" fails in many resamples.
     diff = a - b
     idx = np.random.default_rng(seed).integers(0, diff.size, size=(n_boot, diff.size))
     return float((diff[idx].sum(axis=1) >= 0).mean())
